@@ -48,11 +48,16 @@ This package contains everything you need to train a Text-to-Speech model for Ge
 pip install -r requirements.txt
 
 # For GPU support (CUDA 11.8)
-pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
+pip install torch>=2.6.0 torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
 
 # For GPU support (CUDA 12.1)
-pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
+pip install torch>=2.6.0 torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
+
+# For GPU support (CUDA 12.4 - Latest)
+pip install torch>=2.6.0 torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124
 ```
+
+**Important Security Note:** PyTorch 2.6+ is required to fix a critical security vulnerability in `torch.load`. Do not use earlier versions.
 
 ### Step 3: Verify Installation
 

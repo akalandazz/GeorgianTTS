@@ -4,12 +4,30 @@ Use this to test your fine-tuned model
 """
 
 import os
+import sys
 import torch
 import soundfile as sf
 import argparse
 from transformers import SpeechT5Processor, SpeechT5ForTextToSpeech, SpeechT5HifiGan
 from datasets import load_dataset
 import config
+
+# CRITICAL: Check PyTorch version for security
+def check_pytorch_version():
+    """Verify PyTorch version meets security requirements"""
+    torch_version = tuple(map(int, torch.__version__.split('.')[:2]))
+    if torch_version < (2, 6):
+        print("\n" + "=" * 70)
+        print("❌ CRITICAL SECURITY ERROR")
+        print("=" * 70)
+        print(f"PyTorch version {torch.__version__} is NOT SECURE!")
+        print("\nUpgrade required: pip install torch>=2.6.0")
+        print("See SECURITY_NOTICE.md for details.")
+        print("=" * 70)
+        sys.exit(1)
+
+# Run security check immediately
+check_pytorch_version()
 
 def load_speaker_embeddings():
     """

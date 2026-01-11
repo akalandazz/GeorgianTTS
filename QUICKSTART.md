@@ -7,6 +7,11 @@
 pip install -r requirements.txt
 ```
 
+**⚠️ SECURITY IMPORTANT:** Ensure PyTorch 2.6+ is installed (required for security fix):
+```bash
+pip install torch>=2.6.0 torchvision torchaudio
+```
+
 ### 2. Prepare Your Data Structure
 ```
 data/

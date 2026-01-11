@@ -4,6 +4,7 @@ This script handles the complete training pipeline
 """
 
 import os
+import sys
 import torch
 import pandas as pd
 import numpy as np
@@ -19,6 +20,31 @@ from transformers import (
 from dataclasses import dataclass
 from typing import Any, Dict, List, Union
 import config
+
+# CRITICAL: Check PyTorch version for security
+def check_pytorch_version():
+    """Verify PyTorch version meets security requirements"""
+    torch_version = tuple(map(int, torch.__version__.split('.')[:2]))
+    if torch_version < (2, 6):
+        print("\n" + "=" * 70)
+        print("❌ CRITICAL SECURITY ERROR")
+        print("=" * 70)
+        print(f"PyTorch version {torch.__version__} is NOT SECURE!")
+        print("\nA serious vulnerability exists in torch.load for PyTorch < 2.6.0")
+        print("This vulnerability can allow malicious code execution.")
+        print("\n" + "=" * 70)
+        print("REQUIRED ACTION:")
+        print("=" * 70)
+        print("Upgrade PyTorch to version 2.6.0 or later:")
+        print("\n  pip uninstall torch torchvision torchaudio")
+        print("  pip install torch>=2.6.0 torchvision torchaudio")
+        print("\nSee SECURITY_NOTICE.md for more information.")
+        print("=" * 70)
+        sys.exit(1)
+    print(f"✓ PyTorch {torch.__version__} (secure version)")
+
+# Run security check immediately
+check_pytorch_version()
 
 # Set random seeds for reproducibility
 torch.manual_seed(config.RANDOM_SEED)

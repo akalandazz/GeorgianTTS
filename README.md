@@ -2,6 +2,10 @@
 
 Fine-tune a Text-to-Speech model for Georgian language using your own voice data.
 
+## 🔒 SECURITY NOTICE
+
+**⚠️ READ FIRST:** PyTorch 2.6.0+ is REQUIRED due to a critical security vulnerability. See [SECURITY_NOTICE.md](SECURITY_NOTICE.md) for details.
+
 ## 📋 Overview
 
 This project provides a complete pipeline to:
