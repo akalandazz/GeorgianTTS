@@ -9,7 +9,7 @@ import torch
 import pandas as pd
 import numpy as np
 from pathlib import Path
-from datasets import Dataset, Audio
+from datasets import Dataset, Audio, load_dataset as hf_load_dataset
 from transformers import (
     SpeechT5Processor,
     SpeechT5ForTextToSpeech,
@@ -56,11 +56,31 @@ if config.DEVICE == "cuda":
     print(f"Available GPU memory: {torch.cuda.get_device_properties(0).total_memory / 1e9:.2f} GB")
 
 
+def load_speaker_embeddings():
+    """Load speaker embeddings for SpeechT5"""
+    try:
+        print("\nLoading speaker embeddings...")
+        embeddings_dataset = hf_load_dataset(
+            "Matthijs/cmu-arctic-xvectors",
+            split="validation"
+        )
+        # Use a consistent speaker embedding
+        speaker_embedding = torch.tensor(embeddings_dataset[7306]["xvector"]).unsqueeze(0)
+        print("✓ Loaded speaker embeddings from CMU Arctic dataset")
+        return speaker_embedding
+    except Exception as e:
+        print(f"Warning: Could not load speaker embeddings: {e}")
+        print("Creating dummy embeddings...")
+        # Create dummy embeddings as fallback
+        return torch.zeros(1, 512)
+
+
 class TTSDataset:
     """Handle dataset loading and preprocessing"""
     
-    def __init__(self, processor):
+    def __init__(self, processor, speaker_embeddings):
         self.processor = processor
+        self.speaker_embeddings = speaker_embeddings
         self.audio_dir = os.path.join(config.PROCESSED_DATA_DIR, "audio")
     
     def load_data(self, split="train"):
@@ -93,67 +113,106 @@ class TTSDataset:
         audio = batch["audio"]
         
         # Tokenize text
-        text_inputs = self.processor(
-            text=batch["text"],
-            return_tensors="pt",
-            padding=True,
-            truncation=True
+        text_inputs = self.processor.tokenizer(
+            batch["text"],
+            padding=False,
+            truncation=True,
+            max_length=config.MAX_TEXT_LENGTH
         )
         
-        # Process audio to get mel spectrogram
-        audio_inputs = self.processor(
-            audio=audio["array"],
+        # Process audio to mel spectrogram
+        audio_array = audio["array"]
+        
+        # Normalize audio
+        if audio_array.max() > 0:
+            audio_array = audio_array / np.max(np.abs(audio_array))
+        
+        # Extract mel spectrogram
+        mel_spec = self.processor.feature_extractor(
+            audio_array,
             sampling_rate=audio["sampling_rate"],
-            return_tensors="pt"
-        )
+            return_tensors="np"
+        ).input_values[0]
         
-        # Add labels (mel spectrogram is both input and target for TTS)
-        batch["labels"] = audio_inputs["input_values"][0]
-        batch["input_ids"] = text_inputs["input_ids"][0]
+        # Prepare output
+        batch["input_ids"] = text_inputs["input_ids"]
+        batch["labels"] = mel_spec.T  # Transpose to [time, mel_bins]
+        batch["speaker_embeddings"] = self.speaker_embeddings[0].numpy()
         
         return batch
 
 
 @dataclass
 class DataCollatorSpeechSeq2SeqWithPadding:
-    """Custom data collator for TTS"""
+    """Custom data collator for TTS with proper padding"""
     
     processor: Any
     
-    def __call__(self, features: List[Dict[str, Union[List[int], torch.Tensor]]]) -> Dict[str, torch.Tensor]:
-        # Separate input_ids and labels
-        input_ids = [{"input_ids": feature["input_ids"]} for feature in features]
-        label_features = [{"input_values": feature["labels"]} for feature in features]
+    def __call__(self, features: List[Dict[str, Union[List[int], np.ndarray]]]) -> Dict[str, torch.Tensor]:
+        # Extract input_ids
+        input_ids = [{"input_ids": torch.tensor(feature["input_ids"])} for feature in features]
         
-        # Pad input_ids
-        batch = self.processor.pad(
+        # Pad input_ids using tokenizer
+        batch = self.processor.tokenizer.pad(
             input_ids,
             return_tensors="pt",
             padding=True
         )
         
-        # Pad labels
-        labels_batch = self.processor.pad(
-            label_features,
-            return_tensors="pt",
-            padding=True
-        )
+        # Process labels (mel spectrograms)
+        # Find max length
+        label_lengths = [feature["labels"].shape[0] for feature in features]
+        max_label_length = max(label_lengths)
         
-        # Replace padding with -100 to ignore in loss
-        labels = labels_batch["input_values"]
+        # Get mel bins dimension
+        mel_bins = features[0]["labels"].shape[1]
+        
+        # Pad labels manually
+        labels = []
+        labels_attention_mask = []
+        
+        for feature in features:
+            label = feature["labels"]
+            label_length = label.shape[0]
+            
+            # Pad to max length
+            pad_length = max_label_length - label_length
+            if pad_length > 0:
+                padding = np.zeros((pad_length, mel_bins))
+                label = np.concatenate([label, padding], axis=0)
+            
+            labels.append(label)
+            
+            # Create attention mask
+            attention_mask = np.ones(max_label_length)
+            attention_mask[label_length:] = 0
+            labels_attention_mask.append(attention_mask)
+        
+        # Convert to tensors
+        labels = torch.tensor(np.array(labels), dtype=torch.float32)
+        labels_attention_mask = torch.tensor(np.array(labels_attention_mask), dtype=torch.long)
+        
+        # Mask padded positions with -100
         labels = labels.masked_fill(
-            labels_batch.attention_mask.unsqueeze(-1).eq(0), -100.0
+            labels_attention_mask.unsqueeze(-1) == 0, -100.0
         )
         
         batch["labels"] = labels
+        
+        # Add speaker embeddings (all same for fine-tuning)
+        speaker_embeddings = torch.tensor(
+            np.array([feature["speaker_embeddings"] for feature in features]),
+            dtype=torch.float32
+        )
+        batch["speaker_embeddings"] = speaker_embeddings
         
         return batch
 
 
 def compute_metrics(pred):
     """Compute evaluation metrics"""
-    # For TTS, we typically look at the loss
-    # You can add more sophisticated metrics here
+    # For TTS, we primarily monitor loss
+    # Can add more sophisticated metrics here
     return {}
 
 
@@ -169,6 +228,9 @@ def train():
     os.makedirs(config.OUTPUT_DIR, exist_ok=True)
     os.makedirs(config.LOG_DIR, exist_ok=True)
     
+    # Load speaker embeddings
+    speaker_embeddings = load_speaker_embeddings()
+    
     # Load processor and model
     print(f"\nLoading model: {config.MODEL_NAME}")
     processor = SpeechT5Processor.from_pretrained(config.MODEL_NAME)
@@ -179,7 +241,7 @@ def train():
     
     # Load datasets
     print("\nLoading datasets...")
-    dataset_loader = TTSDataset(processor)
+    dataset_loader = TTSDataset(processor, speaker_embeddings)
     train_dataset = dataset_loader.load_data("train")
     val_dataset = dataset_loader.load_data("val")
     
@@ -220,12 +282,13 @@ def train():
         load_best_model_at_end=config.LOAD_BEST_MODEL_AT_END,
         metric_for_best_model="loss",
         greater_is_better=False,
-        fp16=config.FP16,
+        fp16=config.FP16 and torch.cuda.is_available(),
         dataloader_num_workers=config.DATALOADER_NUM_WORKERS,
         push_to_hub=config.PUSH_TO_HUB,
         report_to=["tensorboard"],
         remove_unused_columns=False,
         label_names=["labels"],
+        predict_with_generate=False,  # Not using generate during training
     )
     
     # Initialize trainer
@@ -252,6 +315,7 @@ def train():
     print(f"Learning rate: {config.LEARNING_RATE}")
     print(f"Epochs: {config.NUM_EPOCHS}")
     print(f"Device: {config.DEVICE}")
+    print(f"Mixed precision (FP16): {config.FP16 and torch.cuda.is_available()}")
     print("=" * 70)
     print("\nStarting training...\n")
     
@@ -262,6 +326,13 @@ def train():
     print("\nSaving final model...")
     trainer.save_model(config.OUTPUT_DIR)
     processor.save_pretrained(config.OUTPUT_DIR)
+    
+    # Save speaker embeddings for inference
+    torch.save(
+        speaker_embeddings,
+        os.path.join(config.OUTPUT_DIR, "speaker_embeddings.pt")
+    )
+    print(f"✓ Saved speaker embeddings")
     
     # Print summary
     print("\n" + "=" * 70)
