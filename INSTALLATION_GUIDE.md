@@ -44,6 +44,15 @@ This package contains everything you need to train a Text-to-Speech model for Ge
 ### Step 2: Install Python Dependencies
 
 ```bash
+# Create Conda Env
+conda create -n ka-tts python=3.10 -y
+
+# Activate Conda env
+conda activate ka-tts
+
+# Install FFmpeg from conda-forge:
+conda install -c conda-forge ffmpeg=8
+
 # Install all required packages
 pip install -r requirements.txt
 
