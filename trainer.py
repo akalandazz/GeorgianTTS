@@ -109,37 +109,61 @@ class TTSDataset:
     
     def prepare_dataset(self, batch):
         """Preprocess a batch of data"""
-        # Extract audio
-        audio = batch["audio"]
-        
-        # Tokenize text
-        text_inputs = self.processor.tokenizer(
-            batch["text"],
-            padding=False,
-            truncation=True,
-            max_length=config.MAX_TEXT_LENGTH
-        )
-        
-        # Process audio to mel spectrogram
-        audio_array = audio["array"]
-        
-        # Normalize audio
-        if audio_array.max() > 0:
-            audio_array = audio_array / np.max(np.abs(audio_array))
-        
-        # Extract mel spectrogram
-        mel_spec = self.processor.feature_extractor(
-            audio_array,
-            sampling_rate=audio["sampling_rate"],
-            return_tensors="np"
-        ).input_values[0]
-        
-        # Prepare output
-        batch["input_ids"] = text_inputs["input_ids"]
-        batch["labels"] = mel_spec.T  # Transpose to [time, mel_bins]
-        batch["speaker_embeddings"] = self.speaker_embeddings[0].numpy()
-        
-        return batch
+        try:
+            # Extract audio
+            audio = batch["audio"]
+            
+            # Tokenize text
+            text_inputs = self.processor.tokenizer(
+                batch["text"],
+                padding=False,
+                truncation=True,
+                max_length=config.MAX_TEXT_LENGTH
+            )
+            
+            # Process audio to mel spectrogram
+            audio_array = audio["array"]
+            
+            # Ensure audio is numpy array
+            if not isinstance(audio_array, np.ndarray):
+                audio_array = np.array(audio_array)
+            
+            # Normalize audio
+            if audio_array.max() > 0:
+                audio_array = audio_array / np.max(np.abs(audio_array))
+            
+            # Extract mel spectrogram
+            mel_spec = self.processor.feature_extractor(
+                audio_array,
+                sampling_rate=audio["sampling_rate"],
+                return_tensors="np"
+            ).input_values[0]
+            
+            # Transpose to [time, mel_bins] if needed
+            if mel_spec.ndim == 2:
+                # Check if we need to transpose
+                # Feature extractor returns [mel_bins, time], we need [time, mel_bins]
+                if mel_spec.shape[0] < mel_spec.shape[1]:
+                    mel_spec = mel_spec.T
+            else:
+                # If 1D, reshape to 2D
+                mel_spec = mel_spec.reshape(-1, 1)
+            
+            # Ensure we have valid data
+            if mel_spec.shape[0] == 0:
+                raise ValueError(f"Empty mel spectrogram for text: {batch['text']}")
+            
+            # Prepare output
+            batch["input_ids"] = text_inputs["input_ids"]
+            batch["labels"] = mel_spec.astype(np.float32)
+            batch["speaker_embeddings"] = self.speaker_embeddings[0].numpy().astype(np.float32)
+            
+            return batch
+            
+        except Exception as e:
+            print(f"Error processing sample: {batch.get('text', 'unknown')}")
+            print(f"Error: {str(e)}")
+            raise
 
 
 @dataclass
@@ -149,7 +173,7 @@ class DataCollatorSpeechSeq2SeqWithPadding:
     processor: Any
     
     def __call__(self, features: List[Dict[str, Union[List[int], np.ndarray]]]) -> Dict[str, torch.Tensor]:
-        # Extract input_ids
+        # Extract input_ids and convert to tensors
         input_ids = [{"input_ids": torch.tensor(feature["input_ids"])} for feature in features]
         
         # Pad input_ids using tokenizer
@@ -160,28 +184,41 @@ class DataCollatorSpeechSeq2SeqWithPadding:
         )
         
         # Process labels (mel spectrograms)
-        # Find max length
-        label_lengths = [feature["labels"].shape[0] for feature in features]
-        max_label_length = max(label_lengths)
-        
-        # Get mel bins dimension
-        mel_bins = features[0]["labels"].shape[1]
-        
-        # Pad labels manually
-        labels = []
-        labels_attention_mask = []
-        
+        # Convert labels to numpy arrays if they aren't already
+        labels_list = []
         for feature in features:
             label = feature["labels"]
+            # Convert to numpy if it's a list or other type
+            if not isinstance(label, np.ndarray):
+                label = np.array(label)
+            labels_list.append(label)
+        
+        # Find max length
+        label_lengths = [label.shape[0] for label in labels_list]
+        max_label_length = max(label_lengths)
+        
+        # Get mel bins dimension (should be consistent across all samples)
+        mel_bins = labels_list[0].shape[1] if len(labels_list[0].shape) > 1 else labels_list[0].shape[0]
+        
+        # Pad labels manually
+        padded_labels = []
+        labels_attention_mask = []
+        
+        for label in labels_list:
             label_length = label.shape[0]
+            
+            # Ensure label is 2D [time, mel_bins]
+            if len(label.shape) == 1:
+                # If 1D, reshape to [time, 1]
+                label = label.reshape(-1, 1)
             
             # Pad to max length
             pad_length = max_label_length - label_length
             if pad_length > 0:
-                padding = np.zeros((pad_length, mel_bins))
+                padding = np.zeros((pad_length, label.shape[1]))
                 label = np.concatenate([label, padding], axis=0)
             
-            labels.append(label)
+            padded_labels.append(label)
             
             # Create attention mask
             attention_mask = np.ones(max_label_length)
@@ -189,7 +226,7 @@ class DataCollatorSpeechSeq2SeqWithPadding:
             labels_attention_mask.append(attention_mask)
         
         # Convert to tensors
-        labels = torch.tensor(np.array(labels), dtype=torch.float32)
+        labels = torch.tensor(np.array(padded_labels), dtype=torch.float32)
         labels_attention_mask = torch.tensor(np.array(labels_attention_mask), dtype=torch.long)
         
         # Mask padded positions with -100
