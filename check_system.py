@@ -35,16 +35,14 @@ def check_gpu():
     print("\nChecking GPU/CUDA...")
     try:
         import torch
-        
+        from utils import check_pytorch_version
+
         # Check PyTorch version for security
-        torch_version = tuple(map(int, torch.__version__.split('.')[:2]))
-        if torch_version < (2, 6):
-            print(f"✗ PyTorch {torch.__version__} - SECURITY RISK!")
-            print("  ⚠️  CRITICAL: PyTorch 2.6+ required due to torch.load vulnerability")
+        if not check_pytorch_version(exit_on_failure=False):
+            print(f"PyTorch {torch.__version__} - SECURITY RISK!")
+            print("  CRITICAL: PyTorch 2.6+ required due to torch.load vulnerability")
             print("  Upgrade with: pip install torch>=2.6.0")
             return False
-        else:
-            print(f"✓ PyTorch {torch.__version__} (secure version)")
         
         if torch.cuda.is_available():
             print(f"✓ CUDA is available")

@@ -9,7 +9,7 @@ import torch
 import pandas as pd
 import numpy as np
 from pathlib import Path
-from datasets import Dataset, Audio, load_dataset as hf_load_dataset
+from datasets import Dataset, Audio
 from transformers import (
     SpeechT5Processor,
     SpeechT5ForTextToSpeech,
@@ -20,28 +20,7 @@ from transformers import (
 from dataclasses import dataclass
 from typing import Any, Dict, List, Union
 import config
-
-# CRITICAL: Check PyTorch version for security
-def check_pytorch_version():
-    """Verify PyTorch version meets security requirements"""
-    torch_version = tuple(map(int, torch.__version__.split('.')[:2]))
-    if torch_version < (2, 6):
-        print("\n" + "=" * 70)
-        print("❌ CRITICAL SECURITY ERROR")
-        print("=" * 70)
-        print(f"PyTorch version {torch.__version__} is NOT SECURE!")
-        print("\nA serious vulnerability exists in torch.load for PyTorch < 2.6.0")
-        print("This vulnerability can allow malicious code execution.")
-        print("\n" + "=" * 70)
-        print("REQUIRED ACTION:")
-        print("=" * 70)
-        print("Upgrade PyTorch to version 2.6.0 or later:")
-        print("\n  pip uninstall torch torchvision torchaudio")
-        print("  pip install torch>=2.6.0 torchvision torchaudio")
-        print("\nSee SECURITY_NOTICE.md for more information.")
-        print("=" * 70)
-        sys.exit(1)
-    print(f"✓ PyTorch {torch.__version__} (secure version)")
+from utils import check_pytorch_version, load_speaker_embeddings
 
 # Run security check immediately
 check_pytorch_version()
@@ -54,25 +33,6 @@ print(f"Using device: {config.DEVICE}")
 if config.DEVICE == "cuda":
     print(f"GPU: {torch.cuda.get_device_name(0)}")
     print(f"Available GPU memory: {torch.cuda.get_device_properties(0).total_memory / 1e9:.2f} GB")
-
-
-def load_speaker_embeddings():
-    """Load speaker embeddings for SpeechT5"""
-    try:
-        print("\nLoading speaker embeddings...")
-        embeddings_dataset = hf_load_dataset(
-            "Matthijs/cmu-arctic-xvectors",
-            split="validation"
-        )
-        # Use a consistent speaker embedding
-        speaker_embedding = torch.tensor(embeddings_dataset[7306]["xvector"]).unsqueeze(0)
-        print("✓ Loaded speaker embeddings from CMU Arctic dataset")
-        return speaker_embedding
-    except Exception as e:
-        print(f"Warning: Could not load speaker embeddings: {e}")
-        print("Creating dummy embeddings...")
-        # Create dummy embeddings as fallback
-        return torch.zeros(1, 512)
 
 
 class TTSDataset:
@@ -90,7 +50,7 @@ class TTSDataset:
         if not os.path.exists(csv_file):
             raise FileNotFoundError(f"Data file not found: {csv_file}")
         
-        df = pd.read_csv(csv_file, sep='|')
+        df = pd.read_csv(csv_file, sep=config.CSV_SEPARATOR)
         
         # Create dataset dictionary
         data_dict = {

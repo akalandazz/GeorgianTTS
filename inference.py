@@ -4,43 +4,15 @@ Use this to test your fine-tuned model
 """
 
 import os
-import sys
 import torch
 import soundfile as sf
 import argparse
 from transformers import SpeechT5Processor, SpeechT5ForTextToSpeech, SpeechT5HifiGan
-from datasets import load_dataset
 import config
-
-# CRITICAL: Check PyTorch version for security
-def check_pytorch_version():
-    """Verify PyTorch version meets security requirements"""
-    torch_version = tuple(map(int, torch.__version__.split('.')[:2]))
-    if torch_version < (2, 6):
-        print("\n" + "=" * 70)
-        print("❌ CRITICAL SECURITY ERROR")
-        print("=" * 70)
-        print(f"PyTorch version {torch.__version__} is NOT SECURE!")
-        print("\nUpgrade required: pip install torch>=2.6.0")
-        print("See SECURITY_NOTICE.md for details.")
-        print("=" * 70)
-        sys.exit(1)
+from utils import check_pytorch_version, load_speaker_embeddings
 
 # Run security check immediately
 check_pytorch_version()
-
-def load_speaker_embeddings():
-    """
-    Load speaker embeddings for voice characteristics
-    For SpeechT5, we need speaker embeddings from the CMU Arctic dataset
-    """
-    embeddings_dataset = load_dataset(
-        "Matthijs/cmu-arctic-xvectors",
-        split="validation"
-    )
-    # Use a speaker embedding (you can experiment with different ones)
-    speaker_embedding = torch.tensor(embeddings_dataset[7306]["xvector"]).unsqueeze(0)
-    return speaker_embedding
 
 def generate_speech(text, model_path=None, output_path="output.wav"):
     """
@@ -93,10 +65,10 @@ def generate_speech(text, model_path=None, output_path="output.wav"):
     
     # Save audio
     speech = speech.cpu().numpy()
-    sf.write(output_path, speech, samplerate=16000)
-    
+    sf.write(output_path, speech, samplerate=config.SAMPLE_RATE)
+
     print(f"Audio saved to: {output_path}")
-    print(f"Duration: {len(speech)/16000:.2f} seconds")
+    print(f"Duration: {len(speech)/config.SAMPLE_RATE:.2f} seconds")
     
     return output_path
 
@@ -127,10 +99,13 @@ def interactive_mode(model_path=None):
         except Exception as e:
             print(f"Error generating speech: {e}")
 
-def batch_mode(input_file, model_path=None, output_dir="batch_outputs"):
+def batch_mode(input_file, model_path=None, output_dir=None):
     """Generate speech for multiple texts from a file"""
+    if output_dir is None:
+        output_dir = config.BATCH_OUTPUT_DIR
+
     print(f"\nBatch mode: processing {input_file}")
-    
+
     # Create output directory
     os.makedirs(output_dir, exist_ok=True)
     

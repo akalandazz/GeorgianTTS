@@ -85,7 +85,7 @@ def prepare_dataset():
         print("sample_002.wav|საქართველო არის ქვეყანა")
         return
     
-    df = pd.read_csv(config.METADATA_FILE, sep='|')
+    df = pd.read_csv(config.METADATA_FILE, sep=config.CSV_SEPARATOR)
     print(f"Found {len(df)} entries in metadata")
     
     # Validate and process each entry
@@ -142,7 +142,7 @@ def prepare_dataset():
     
     processed_df = pd.DataFrame(valid_entries)
     processed_metadata_path = os.path.join(config.PROCESSED_DATA_DIR, "metadata.csv")
-    processed_df.to_csv(processed_metadata_path, sep='|', index=False)
+    processed_df.to_csv(processed_metadata_path, sep=config.CSV_SEPARATOR, index=False)
     
     # Split into train and validation
     from sklearn.model_selection import train_test_split
@@ -154,11 +154,11 @@ def prepare_dataset():
     
     train_df.to_csv(
         os.path.join(config.PROCESSED_DATA_DIR, "train.csv"),
-        sep='|', index=False
+        sep=config.CSV_SEPARATOR, index=False
     )
     val_df.to_csv(
         os.path.join(config.PROCESSED_DATA_DIR, "val.csv"),
-        sep='|', index=False
+        sep=config.CSV_SEPARATOR, index=False
     )
     
     # Print summary

@@ -93,6 +93,22 @@ LANGUAGE = "ka"  # Georgian language code
 TEXT_CLEANER = "basic"  # Options: basic, advanced, custom
 
 # ============================================================================
+# SPEAKER EMBEDDINGS
+# ============================================================================
+SPEAKER_EMBEDDING_INDEX = 7306  # Index in CMU Arctic dataset
+SPEAKER_EMBEDDING_DATASET = "Matthijs/cmu-arctic-xvectors"
+
+# ============================================================================
+# DATA FORMAT
+# ============================================================================
+CSV_SEPARATOR = "|"  # Metadata file separator
+
+# ============================================================================
+# OUTPUT PATTERNS
+# ============================================================================
+BATCH_OUTPUT_DIR = "batch_outputs"
+
+# ============================================================================
 # ADVANCED OPTIONS
 # ============================================================================
 USE_CACHE = True  # Cache processed datasets
@@ -108,9 +124,15 @@ import torch
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 NUM_GPUS = torch.cuda.device_count() if torch.cuda.is_available() else 0
 
-print(f"Configuration loaded:")
-print(f"  Device: {DEVICE}")
-print(f"  Number of GPUs: {NUM_GPUS}")
-print(f"  Model: {MODEL_NAME}")
-print(f"  Batch size: {BATCH_SIZE}")
-print(f"  Learning rate: {LEARNING_RATE}")
+def print_config_summary():
+    """Print configuration summary. Call explicitly when needed."""
+    print(f"Configuration loaded:")
+    print(f"  Device: {DEVICE}")
+    print(f"  Number of GPUs: {NUM_GPUS}")
+    print(f"  Model: {MODEL_NAME}")
+    print(f"  Batch size: {BATCH_SIZE}")
+    print(f"  Learning rate: {LEARNING_RATE}")
+
+
+if __name__ == "__main__":
+    print_config_summary()

@@ -138,8 +138,8 @@ def display_status():
         
         if os.path.exists(train_file) and os.path.exists(val_file):
             import pandas as pd
-            train_df = pd.read_csv(train_file, sep='|')
-            val_df = pd.read_csv(val_file, sep='|')
+            train_df = pd.read_csv(train_file, sep=config.CSV_SEPARATOR)
+            val_df = pd.read_csv(val_file, sep=config.CSV_SEPARATOR)
             
             print(f"✓ Data preprocessed")
             print(f"  Training samples: {len(train_df)}")

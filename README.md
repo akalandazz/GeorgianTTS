@@ -1,130 +1,118 @@
-# Georgian TTS Fine-tuning Project
+# Georgian TTS Fine-tuning
 
-Fine-tune a Text-to-Speech model for Georgian language using your own voice data.
+Fine-tune Microsoft SpeechT5 for Georgian text-to-speech using your own voice data.
 
-## 🔒 SECURITY NOTICE
+> **Security:** PyTorch 2.6.0+ is required. See [SECURITY_NOTICE.md](SECURITY_NOTICE.md).
 
-**⚠️ READ FIRST:** PyTorch 2.6.0+ is REQUIRED due to a critical security vulnerability. See [SECURITY_NOTICE.md](SECURITY_NOTICE.md) for details.
-
-## 📋 Overview
-
-This project provides a complete pipeline to:
-- Preprocess Georgian audio and text data
-- Fine-tune a pre-trained TTS model (SpeechT5)
-- Generate natural-sounding Georgian speech from text
-
-## 🚀 Quick Start
+## Quick Start
 
 ```bash
-# 1. Install dependencies
+# 1. Setup environment
+conda create -n ka-tts python=3.10 -y
+conda activate ka-tts
+conda install -c conda-forge ffmpeg=8
 pip install -r requirements.txt
 
-# 2. Prepare your data (see structure below)
-# 3. Run preprocessing
+# 2. GPU support (choose your CUDA version)
+pip install torch>=2.6.0 torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124
+
+# 3. Verify system
+python check_system.py
+
+# 4. Initialize directories
+python setup.py
+
+# 5. Add your data to data/audio/ and create data/metadata.csv
+
+# 6. Process data
 python prepare_data.py
 
-# 4. Start training
+# 7. Train
 python trainer.py
 
-# 5. Test the model
+# 8. Generate speech
 python inference.py --text "ეს არის ტესტი"
 ```
 
-For detailed instructions, see [QUICKSTART.md](QUICKSTART.md)
+## Data Format
 
-## 📁 Project Structure
+Place WAV files in `data/audio/` and create `data/metadata.csv`:
 
 ```
-tts-georgian-finetune/
-├── data/
-│   ├── audio/              # Your .wav files
-│   └── metadata.csv        # Transcriptions
-├── processed_data/         # Preprocessed data (auto-generated)
-├── checkpoints/            # Training checkpoints (auto-generated)
-├── output/                 # Final model (auto-generated)
-├── logs/                   # Training logs (auto-generated)
-├── config.py              # Configuration settings
-├── prepare_data.py        # Data preprocessing
-├── trainer.py             # Training script
-├── inference.py           # Generate speech
-├── requirements.txt       # Python dependencies
-└── README.md              # This file
-```
-
-## 📊 Data Requirements
-
-### Audio Files
-- Format: WAV
-- Sample rate: 16kHz (will be resampled automatically)
-- Duration: 1-20 seconds per clip
-- Quality: Clear speech, minimal background noise
-- Total: Minimum 30 minutes (1-2 hours recommended)
-
-### Metadata Format
-CSV file with pipe separator: `filename|text`
-
-Example:
-```csv
 filename|text
-audio_001.wav|ეს არის ქართული ტექსტი
-audio_002.wav|საქართველო არის ქვეყანა
+sample_001.wav|ეს არის ქართული ტექსტი
+sample_002.wav|საქართველო არის ქვეყანა
 ```
 
-See [metadata_example.csv](metadata_example.csv) for a complete example.
+**Requirements:**
+- WAV format, 1-20 seconds per clip
+- Minimum 30 minutes total (2+ hours recommended)
+- Clear speech, minimal background noise
 
-## ⚙️ Configuration
+## Project Structure
 
-Edit `config.py` to customize:
-- Model architecture
-- Training hyperparameters
-- Data processing settings
-- Hardware utilization
+```
+├── data/audio/         # Your WAV files
+├── data/metadata.csv   # Transcriptions
+├── processed_data/     # Preprocessed data (auto-generated)
+├── checkpoints/        # Training checkpoints (auto-generated)
+├── output/             # Final model (auto-generated)
+├── logs/               # TensorBoard logs (auto-generated)
+├── config.py           # Configuration
+├── utils.py            # Shared utilities
+├── prepare_data.py     # Data preprocessing
+├── trainer.py          # Training script
+├── inference.py        # Generate speech
+├── monitor.py          # Training monitor
+├── check_system.py     # System verification
+└── setup.py            # Directory initialization
+```
 
-Key settings:
+## Configuration
+
+Edit `config.py` to adjust settings:
+
 ```python
-BATCH_SIZE = 4              # Adjust based on GPU memory
-LEARNING_RATE = 1e-5        # Learning rate
-NUM_EPOCHS = 50             # Training epochs
-SAMPLE_RATE = 16000         # Audio sample rate
+# Adjust for GPU memory
+BATCH_SIZE = 4                    # Reduce to 2 or 1 if OOM
+GRADIENT_ACCUMULATION_STEPS = 4   # Increase when reducing batch size
+FP16 = True                       # Mixed precision for faster training
+
+# Training
+LEARNING_RATE = 1e-5
+NUM_EPOCHS = 50
+
+# Audio
+SAMPLE_RATE = 16000
 ```
 
-## 🎓 Training
+## Training
 
-### Monitor Training
 ```bash
+# Start training
+python trainer.py
+
+# Monitor with TensorBoard
 tensorboard --logdir logs/
+
+# Check status
+python monitor.py
 ```
 
-### Training Tips
-- Start with a small dataset to verify everything works
-- Monitor loss - it should decrease steadily
-- Save checkpoints regularly (configured in config.py)
-- Test early checkpoints - sometimes they sound better
+## Inference
 
-### Expected Training Time
-- Small dataset (30 min): 2-4 hours
-- Medium dataset (2 hours): 8-12 hours
-- Large dataset (5+ hours): 24-48 hours
-
-## 🎤 Inference
-
-### Single Text
 ```bash
+# Single text
 python inference.py --text "გამარჯობა"
-```
 
-### Interactive Mode
-```bash
+# Interactive mode
 python inference.py --interactive
-```
 
-### Batch Processing
-Create a text file with one sentence per line:
-```bash
+# Batch processing
 python inference.py --batch texts.txt
 ```
 
-### Python API
+**Python API:**
 ```python
 from inference import generate_speech
 
@@ -135,100 +123,33 @@ generate_speech(
 )
 ```
 
-## 🔧 Troubleshooting
+## Troubleshooting
 
-### Out of Memory
-Reduce batch size in `config.py`:
+**Out of Memory:**
 ```python
-BATCH_SIZE = 2  # or even 1
-GRADIENT_ACCUMULATION_STEPS = 8
+BATCH_SIZE = 1
+GRADIENT_ACCUMULATION_STEPS = 16
+FP16 = True
 ```
 
-### Poor Audio Quality
-- Check training data quality
-- Verify transcriptions are accurate
+**Poor Quality:**
+- Check audio quality and transcription accuracy
 - Train for more epochs
-- Try different learning rates
+- Try lower learning rate: `LEARNING_RATE = 5e-6`
 
-### Slow Training
-- Increase batch size (if GPU allows)
-- Reduce number of dataloader workers
-- Enable FP16 training
+**No GPU Detected:**
+```bash
+python -c "import torch; print(torch.cuda.is_available())"
+```
 
-See [TTS_FINETUNING_GUIDE.md](TTS_FINETUNING_GUIDE.md) for detailed troubleshooting.
+## Hardware Requirements
 
-## 📚 Documentation
+| | Minimum | Recommended |
+|---|---------|-------------|
+| GPU | 8GB VRAM | 16GB+ VRAM |
+| RAM | 16GB | 32GB |
+| Storage | 10GB | 50GB |
 
-- [Quick Start Guide](QUICKSTART.md) - Get started in 5 minutes
-- [Complete Guide](TTS_FINETUNING_GUIDE.md) - Comprehensive documentation
-- [Example Metadata](metadata_example.csv) - Sample data format
+## License
 
-## 🛠️ Technical Details
-
-### Model Architecture
-- Base model: Microsoft SpeechT5
-- Fine-tuning approach: Full model fine-tuning
-- Vocoder: HiFi-GAN
-
-### Dependencies
-- PyTorch >= 2.0.0
-- Transformers >= 4.35.0
-- Librosa >= 0.10.0
-- See [requirements.txt](requirements.txt) for complete list
-
-## 📝 Scripts Overview
-
-| Script | Purpose |
-|--------|---------|
-| `config.py` | Configuration settings |
-| `prepare_data.py` | Preprocess audio and text |
-| `trainer.py` | Train the TTS model |
-| `inference.py` | Generate speech from text |
-
-## 🎯 Best Practices
-
-1. **Data Quality**
-   - Use consistent recording equipment
-   - Record in a quiet environment
-   - Ensure clear pronunciation
-   - Match text exactly to audio
-
-2. **Training**
-   - Start with small dataset to test pipeline
-   - Monitor training metrics regularly
-   - Save multiple checkpoints
-   - Test during training, not just at the end
-
-3. **Inference**
-   - Test with diverse texts
-   - Compare different checkpoints
-   - Adjust inference parameters if needed
-
-## 🤝 Contributing
-
-This is a template project. Feel free to:
-- Modify for other languages
-- Try different base models
-- Improve preprocessing
-- Add new features
-
-## 📄 License
-
-This project is provided as-is for educational and research purposes.
-
-## 🙏 Acknowledgments
-
-- Microsoft for SpeechT5 model
-- Hugging Face for the Transformers library
-- The open-source community
-
-## 📮 Support
-
-For issues and questions:
-- Check the troubleshooting section
-- Review the documentation
-- Examine the example files
-
----
-
-**Note:** This is a template for fine-tuning TTS models. Adjust configurations based on your specific requirements and hardware capabilities.
+This project uses Microsoft SpeechT5 (MIT), Hugging Face Transformers (Apache 2.0), and PyTorch (BSD).
