@@ -150,6 +150,44 @@ python -c "import torch; print(torch.cuda.is_available())"
 | RAM | 16GB | 32GB |
 | Storage | 10GB | 50GB |
 
+## Ubuntu Compatibility
+
+**Ubuntu 22.04 LTS** is the recommended host OS for this project.
+
+| Requirement | Ubuntu 22.04 Support |
+|-------------|---------------------|
+| Python 3.10 | Default system Python (pre-installed) |
+| PyTorch 2.6.0 + CUDA 12.4 | Tested and supported |
+| phonemizer/espeak-ng | Available in default repositories |
+
+### System Requirements
+
+- **NVIDIA Driver**: 545+ (or 535+ for data center GPUs like T4)
+- **Linux Kernel**: 6.1.24+ or 6.2.11+ (for CUDA 12.4 HMM features)
+
+### Ubuntu 22.04 Setup
+
+```bash
+# Install system dependencies
+sudo apt update
+sudo apt install espeak-ng ffmpeg
+
+# Then follow Quick Start above
+```
+
+### Ubuntu 24.04 LTS (Alternative)
+
+Ubuntu 24.04 can work but requires extra configuration:
+- Install Python 3.10 via [Deadsnakes PPA](https://launchpad.net/~deadsnakes/+archive/ubuntu/ppa) (default is Python 3.12)
+- May need additional CUDA configuration
+
+```bash
+# Install Python 3.10 on Ubuntu 24.04
+sudo add-apt-repository ppa:deadsnakes/ppa
+sudo apt update
+sudo apt install python3.10 python3.10-venv python3.10-dev
+```
+
 ## License
 
 This project uses Microsoft SpeechT5 (MIT), Hugging Face Transformers (Apache 2.0), and PyTorch (BSD).
